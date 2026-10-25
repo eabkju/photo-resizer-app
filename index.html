@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pure Offline Image Resizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-highlight: rgba(255, 255, 255, 0.25);
+        }
+
+        body {
+            background-color: #022c22;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(20, 184, 166, 0.4), transparent 35%),
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.4), transparent 35%),
+                radial-gradient(circle at 50% 80%, rgba(6, 95, 70, 0.4), transparent 35%);
+            background-attachment: fixed;
+            color: #f8fafc;
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            border-radius: 1.25rem;
+        }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .glass-input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(4px);
+            transition: all 0.2s;
+        }
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+        .glass-btn:active {
+            transform: translateY(1px);
+        }
+        .glass-btn-primary {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.6), rgba(16, 185, 129, 0.6));
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .glass-btn-primary:hover {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.8), rgba(16, 185, 129, 0.8));
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+
+        .cropper-view-box,
+        .cropper-face {
+            border-radius: 4px;
+        }
+        .cropper-dashed {
+            border: 1px dashed rgba(255,255,255,0.5);
+        }
+        
+        #upload-zone {
+            transition: all 0.3s ease;
+        }
+        #upload-zone.dragover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #14b8a6;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8 text-center md:text-left flex flex-col md:flex-row items-center justify-between">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-300 to-emerald-300 drop-shadow-md">
+                    <i class="ph ph-aperture inline-block mr-2"></i>Pure Offline Image Resizer
+                </h1>
+                <p class="text-slate-300 text-sm mt-1">100% Offline & Private Image Processor</p>
+            </div>
+            
+            <label class="mt-4 md:mt-0 glass-btn glass-btn-primary px-6 py-2.5 rounded-full font-medium cursor-pointer flex items-center gap-2">
+                <i class="ph ph-upload-simple text-xl"></i>
+                Upload New Image
+                <input type="file" id="file-input" class="hidden" accept="image/png, image/jpeg, image/webp">
+            </label>
+        </header>
+
+        <div id="initial-upload" class="glass-panel h-[60vh] flex flex-col items-center justify-center border-dashed border-2 border-slate-400 hover:border-teal-400 cursor-pointer group transition-all" onclick="document.getElementById('file-input').click()">
+            <div class="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <i class="ph ph-image text-5xl text-slate-300 group-hover:text-teal-300"></i>
+            </div>
+            <h2 class="text-2xl font-semibold mb-2">Drag & Drop Image Here</h2>
+            <p class="text-slate-400">or click to browse from your device</p>
+            <p class="text-slate-500 text-sm mt-4">Supports JPG, PNG, WEBP</p>
+        </div>
+
+        <div id="editor-workspace" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 flex flex-col gap-4">
+                <div class="glass-panel p-4 h-[60vh] relative flex items-center justify-center overflow-hidden">
+                    <img id="image-workspace" src="" alt="Workspace" class="max-w-full max-h-full block">
+                </div>
+                
+                <div class="glass-panel p-3 flex flex-wrap justify-center gap-2">
+                    <button class="glass-btn px-4 py-2 rounded-lg text-sm flex items-center gap-1" onclick="setAspectRatio(NaN)"><i class="ph ph-crop"></i> Free</button>
+                    <button class="glass-btn px-4 py-2 rounded-lg text-sm" onclick="setAspectRatio(1)"><i class="ph ph-square"></i> 1:1</button>
+                    <button class="glass-btn px-4 py-2 rounded-lg text-sm" onclick="setAspectRatio(16/9)"><i class="ph ph-rectangle"></i> 16:9</button>
+                    <button class="glass-btn px-4 py-2 rounded-lg text-sm" onclick="setAspectRatio(4/3)"><i class="ph ph-monitor"></i> 4:3</button>
+                    <button class="glass-btn px-4 py-2 rounded-lg text-sm" onclick="setAspectRatio(2/3)"><i class="ph ph-portrait"></i> 2:3</button>
+                </div>
+            </div>
+
+            <div class="lg:col-span-4 flex flex-col gap-4 h-full">
+                <div class="glass-panel p-5">
+                    <h3 class="text-lg font-semibold border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
+                        <i class="ph ph-arrows-out text-teal-400"></i> Resize Dimensions
+                    </h3>
+                    
+                    <div class="mb-4">
+                        <label class="block text-xs text-slate-300 mb-1 uppercase tracking-wider">Unit / Mode</label>
+                        <select id="unit-select" class="glass-input w-full p-2 rounded-lg text-sm" onchange="handleUnitChange()">
+                            <option value="px">Pixels (px)</option>
+                            <option value="percent">Percentage (%)</option>
+                            <option value="inch">Inches (in)</option>
+                            <option value="cm">Centimeters (cm)</option>
+                            <option value="mm">Millimeters (mm)</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <label class="block text-xs text-slate-300 mb-1">Width</label>
+                            <input type="number" id="input-width" class="glass-input w-full p-2 rounded-lg text-sm" placeholder="Width" oninput="handleDimensionInput('width')">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-300 mb-1">Height</label>
+                            <input type="number" id="input-height" class="glass-input w-full p-2 rounded-lg text-sm" placeholder="Height" oninput="handleDimensionInput('height')">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 mb-4">
+                        <input type="checkbox" id="lock-aspect" class="rounded accent-pink-500 w-4 h-4" checked>
+                        <label for="lock-aspect" class="text-sm text-slate-300">Lock Aspect Ratio</label>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="block text-xs text-slate-300 mb-1 uppercase tracking-wider">Conventional Presets</label>
+                        <select id="preset-select" class="glass-input w-full p-2 rounded-lg text-sm" onchange="applyPreset()">
+                            <option value="">Custom Size...</option>
+                            <optgroup label="Web & Social">
+                                <option value="1920x1080">FHD (1920 x 1080 px)</option>
+                                <option value="1080x1080">Instagram Square (1080 x 1080 px)</option>
+                            </optgroup>
+                            <optgroup label="International Passports & Visas">
+                                <option value="us-passport">US / India Passport (2 x 2 in)</option>
+                                <option value="uk-passport">UK / Europe / Aus Passport (35 x 45 mm)</option>
+                                <option value="ca-passport">Canada Passport (50 x 70 mm)</option>
+                                <option value="cn-passport">China Passport (33 x 48 mm)</option>
+                            </optgroup>
+                            <optgroup label="Standard Prints">
+                                <option value="4x6in">Standard Print (4 x 6 in)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5">
+                    <h3 class="text-lg font-semibold border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
+                        <i class="ph ph-magic-wand text-teal-400"></i> Filters & Effects
+                    </h3>
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <label class="flex items-center gap-1 text-sm text-slate-300 cursor-pointer">
+                            <input type="checkbox" id="f-gray" class="rounded accent-teal-500" onchange="updateFilters()"> B&W
+                        </label>
+                        <label class="flex items-center gap-1 text-sm text-slate-300 cursor-pointer">
+                            <input type="checkbox" id="f-sepia" class="rounded accent-teal-500" onchange="updateFilters()"> Sepia
+                        </label>
+                        <label class="flex items-center gap-1 text-sm text-slate-300 cursor-pointer">
+                            <input type="checkbox" id="f-invert" class="rounded accent-teal-500" onchange="updateFilters()"> Invert
+                        </label>
+                    </div>
+                    <div class="space-y-3 mt-4 mb-4">
+                        <div>
+                            <label class="flex justify-between text-xs text-slate-300 mb-1">Brightness <span id="val-bright">100%</span></label>
+                            <input type="range" id="f-bright" min="0" max="200" value="100" class="w-full accent-teal-400 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer" oninput="updateFilters()">
+                        </div>
+                        <div>
+                            <label class="flex justify-between text-xs text-slate-300 mb-1">Contrast <span id="val-contrast">100%</span></label>
+                            <input type="range" id="f-contrast" min="0" max="200" value="100" class="w-full accent-teal-400 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer" oninput="updateFilters()">
+                        </div>
+                        <div>
+                            <label class="flex justify-between text-xs text-slate-300 mb-1">Saturation <span id="val-saturate">100%</span></label>
+                            <input type="range" id="f-saturate" min="0" max="200" value="100" class="w-full accent-teal-400 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer" oninput="updateFilters()">
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-white/10">
+                        <label class="block text-xs text-slate-300 mb-1 uppercase tracking-wider flex justify-between">
+                            Advanced Art Effects <span class="text-[10px] text-teal-300">(Applied on Export)</span>
+                        </label>
+                        <select id="advanced-effect" class="glass-input w-full p-2 rounded-lg text-sm">
+                            <option value="none">None</option>
+                            <option value="sketch">Sketch / Pencil</option>
+                            <option value="cartoon">Cartoon / Toon</option>
+                            <option value="watercolor">Watercolor (Soft + Posterize)</option>
+                            <option value="pop">Pop Color / Color Splash</option>
+                            <option value="oil">Oil Painting (Approximation)</option>
+                            <option value="neural">Neural / AI Art Style (Vibrant Edge)</option>
+                            <option value="light-leaks">Light Leaks</option>
+                            <option value="bokeh">Bokeh</option>
+                            <option value="sparkle">Sparkle / Shimmer</option>
+                            <option value="neon">Neon Glow</option>
+                            <option value="glitch">Glitch / Chromatic Aberration</option>
+                            <option value="drip">Drip Art</option>
+                            <option value="shatter">Shattering / Dispersion</option>
+                            <option value="spirals">Spirals & Bubbly</option>
+                            <option value="motion-blur">Motion Blur</option>
+                            <option value="zoom-blur">Zoom Blur</option>
+                            <option value="soft-blur">Gaussian / Soft Blur</option>
+                            <option value="film-grain">Film Grain</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5">
+                    <h3 class="text-lg font-semibold border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
+                        <i class="ph ph-text-t text-teal-400"></i> Text Overlay
+                    </h3>
+                    <div class="space-y-3">
+                        <input type="text" id="t-text" placeholder="Enter text here..." class="glass-input w-full p-2 rounded-lg text-sm" oninput="updateTextPreview()">
+                        
+                        <div class="mb-2">
+                            <label class="block text-xs text-slate-300 mb-1">Font Family</label>
+                            <select id="t-font" class="glass-input w-full p-2 rounded-lg text-sm" onchange="updateTextPreview()">
+                                <option value="sans-serif">Sans Serif</option>
+                                <option value="serif">Serif</option>
+                                <option value="monospace">Monospace</option>
+                                <option value="'Courier New', Courier, monospace">Courier New</option>
+                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                                <option value="'Comic Sans MS', cursive, sans-serif">Comic Sans</option>
+                                <option value="'Impact', fantasy">Impact</option>
+                                <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Color</label>
+                                <input type="color" id="t-color" value="#ffffff" class="w-full h-8 rounded bg-transparent cursor-pointer border-0 p-0" oninput="updateTextPreview()">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Size (px)</label>
+                                <input type="number" id="t-size" value="40" class="glass-input w-full p-1.5 rounded-lg text-sm" oninput="updateTextPreview()">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mt-2">
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Pos X: Center</label>
+                                <input type="range" id="t-x" min="0" max="100" value="50" class="w-full accent-teal-400 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer" oninput="updateTextPreview()">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Pos Y: Center</label>
+                                <input type="range" id="t-y" min="0" max="100" value="50" class="w-full accent-teal-400 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer" oninput="updateTextPreview()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5 flex-grow flex flex-col">
+                    <h3 class="text-lg font-semibold border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
+                        <i class="ph ph-export text-emerald-400"></i> Export Settings
+                    </h3>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs text-slate-300 mb-1">Format</label>
+                            <select id="export-format" class="glass-input w-full p-2 rounded-lg text-sm">
+                                <option value="image/jpeg">JPG</option>
+                                <option value="image/png">PNG</option>
+                                <option value="image/webp">WEBP</option>
+                                <option value="image/bmp">BMP</option>
+                                <option value="image/gif">GIF</option>
+                                <option value="image/avif">AVIF</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-300 mb-1" title="Target file size">Max Size (KB)</label>
+                            <input type="number" id="export-kb" class="glass-input w-full p-2 rounded-lg text-sm" placeholder="e.g. 300 (Optional)">
+                        </div>
+                    </div>
+                    
+                    <p class="text-xs text-slate-400 mb-4 bg-white/5 p-2 rounded border border-white/10">
+                        <i class="ph ph-info inline"></i> If a KB limit is set, the app will auto-compress JPG/WEBP to fit. PNG ignores this as it is lossless.
+                    </p>
+
+                    <div class="mt-auto">
+                        <button onclick="processAndDownload()" class="w-full glass-btn-primary py-3 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(20,184,166,0.4)]">
+                            <i class="ph ph-download-simple text-xl"></i>
+                            Process & Download
+                        </button>
+                        <p id="status-msg" class="text-center text-sm mt-2 h-4 text-emerald-300"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="process-canvas" class="hidden"></canvas>
+
+    <script>
+        const DPI = 96;
+        const CM_PER_INCH = 2.54;
+        const MM_PER_INCH = 25.4;
+
+        let cropper = null;
+        let originalFileName = "image";
+        let isProcessing = false;
+        
+        const fileInput = document.getElementById('file-input');
+        const initialUpload = document.getElementById('initial-upload');
+        const editorWorkspace = document.getElementById('editor-workspace');
+        const imageWorkspace = document.getElementById('image-workspace');
+        
+        const inputWidth = document.getElementById('input-width');
+        const inputHeight = document.getElementById('input-height');
+        const unitSelect = document.getElementById('unit-select');
+        const lockAspect = document.getElementById('lock-aspect');
+        const presetSelect = document.getElementById('preset-select');
+        const statusMsg = document.getElementById('status-msg');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            initialUpload.addEventListener(eventName, () => initialUpload.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            initialUpload.addEventListener(eventName, () => initialUpload.classList.remove('dragover'), false);
+        });
+
+        document.body.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            if(files.length > 0) handleFile(files[0]);
+        }
+
+        fileInput.addEventListener('change', function(e) {
+            if(e.target.files.length > 0) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert("Please upload a valid image file (JPG, PNG, WEBP).");
+                return;
+            }
+
+            originalFileName = file.name.split('.')[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(event) {
+                initialUpload.classList.add('hidden');
+                editorWorkspace.classList.remove('hidden');
+
+                if(cropper) {
+                    cropper.destroy();
+                }
+
+                imageWorkspace.src = event.target.result;
+                
+                document.getElementById('f-gray').checked = false;
+                document.getElementById('f-sepia').checked = false;
+                document.getElementById('f-invert').checked = false;
+                document.getElementById('f-bright').value = 100;
+                document.getElementById('f-contrast').value = 100;
+                document.getElementById('f-saturate').value = 100;
+                document.getElementById('t-text').value = "";
+                updateFilters();
+
+                cropper = new Cropper(imageWorkspace, {
+                    viewMode: 1,
+                    dragMode: 'crop',
+                    autoCropArea: 1,
+                    restore: false,
+                    guides: true,
+                    center: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                    crop: function(event) {
+                        if(unitSelect.value === 'px' && document.activeElement !== inputWidth && document.activeElement !== inputHeight) {
+                            inputWidth.value = Math.round(event.detail.width);
+                            inputHeight.value = Math.round(event.detail.height);
+                        }
+                        
+                        if (typeof updateTextPreview === 'function') {
+                            updateTextPreview();
+                        }
+                    },
+                    ready: function() {
+                        updateFilters();
+                    }
+                });
+
+                unitSelect.value = 'px';
+                presetSelect.value = '';
+                document.getElementById('export-kb').value = '';
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
+        function setAspectRatio(ratio) {
+            if(cropper) cropper.setAspectRatio(ratio);
+            presetSelect.value = '';
+        }
+
+        function handleUnitChange() {
+            if(!cropper) return;
+            const cropData = cropper.getData();
+            const unit = unitSelect.value;
+            
+            let w = cropData.width;
+            let h = cropData.height;
+
+            switch(unit) {
+                case 'px':
+                    inputWidth.value = Math.round(w);
+                    inputHeight.value = Math.round(h);
+                    break;
+                case 'percent':
+                    inputWidth.value = 100;
+                    inputHeight.value = 100;
+                    break;
+                case 'inch':
+                    inputWidth.value = (w / DPI).toFixed(2);
+                    inputHeight.value = (h / DPI).toFixed(2);
+                    break;
+                case 'cm':
+                    inputWidth.value = ((w / DPI) * CM_PER_INCH).toFixed(2);
+                    inputHeight.value = ((h / DPI) * CM_PER_INCH).toFixed(2);
+                    break;
+                case 'mm':
+                    inputWidth.value = ((w / DPI) * MM_PER_INCH).toFixed(1);
+                    inputHeight.value = ((h / DPI) * MM_PER_INCH).toFixed(1);
+                    break;
+            }
+            presetSelect.value = '';
+        }
+
+        function handleDimensionInput(changed) {
+            if(!cropper || !lockAspect.checked) return;
+            presetSelect.value = '';
+            
+            const cropData = cropper.getData();
+            const ratio = cropData.width / cropData.height;
+            const unit = unitSelect.value;
+
+            if(changed === 'width' && inputWidth.value) {
+                let val = parseFloat(inputWidth.value);
+                if(unit === 'percent' || unit === 'px') {
+                    inputHeight.value = Math.round(val / ratio);
+                } else {
+                    inputHeight.value = (val / ratio).toFixed(2);
+                }
+            } else if (changed === 'height' && inputHeight.value) {
+                let val = parseFloat(inputHeight.value);
+                if(unit === 'percent' || unit === 'px') {
+                    inputWidth.value = Math.round(val * ratio);
+                } else {
+                    inputWidth.value = (val * ratio).toFixed(2);
+                }
+            }
+        }
+
+        function applyPreset() {
+            const preset = presetSelect.value;
+            if(!preset || !cropper) return;
+
+            unitSelect.value = 'px';
+            
+            switch(preset) {
+                case '1920x1080':
+                    setAspectRatio(1920/1080);
+                    inputWidth.value = 1920;
+                    inputHeight.value = 1080;
+                    break;
+                case '1080x1080':
+                    setAspectRatio(1);
+                    inputWidth.value = 1080;
+                    inputHeight.value = 1080;
+                    break;
+                case 'us-passport':
+                    unitSelect.value = 'inch';
+                    setAspectRatio(1);
+                    inputWidth.value = 2;
+                    inputHeight.value = 2;
+                    break;
+                case 'uk-passport':
+                    unitSelect.value = 'mm';
+                    setAspectRatio(35/45);
+                    inputWidth.value = 35;
+                    inputHeight.value = 45;
+                    break;
+                case 'ca-passport':
+                    unitSelect.value = 'mm';
+                    setAspectRatio(50/70);
+                    inputWidth.value = 50;
+                    inputHeight.value = 70;
+                    break;
+                case 'cn-passport':
+                    unitSelect.value = 'mm';
+                    setAspectRatio(33/48);
+                    inputWidth.value = 33;
+                    inputHeight.value = 48;
+                    break;
+                case '4x6in':
+                    unitSelect.value = 'inch';
+                    setAspectRatio(4/6);
+                    inputWidth.value = 4;
+                    inputHeight.value = 6;
+                    break;
+            }
+        }
+
+        function updateFilters() {
+            const fGray = document.getElementById('f-gray').checked ? 100 : 0;
+            const fSepia = document.getElementById('f-sepia').checked ? 100 : 0;
+            const fInvert = document.getElementById('f-invert').checked ? 100 : 0;
+            const fBright = document.getElementById('f-bright').value;
+            const fContrast = document.getElementById('f-contrast').value;
+            const fSaturate = document.getElementById('f-saturate').value;
+
+            document.getElementById('val-bright').textContent = fBright + '%';
+            document.getElementById('val-contrast').textContent = fContrast + '%';
+            document.getElementById('val-saturate').textContent = fSaturate + '%';
+
+            const filterStr = `grayscale(${fGray}%) sepia(${fSepia}%) invert(${fInvert}%) brightness(${fBright}%) contrast(${fContrast}%) saturate(${fSaturate}%)`;
+            const previewImages = document.querySelectorAll('.cropper-canvas img, .cropper-view-box img');
+            previewImages.forEach(img => {
+                img.style.filter = filterStr;
+                img.style.transition = 'filter 0.2s ease';
+            });
+        }
+
+        function updateTextPreview() {
+            const viewBox = document.querySelector('.cropper-view-box');
+            if (!viewBox || !cropper) return;
+
+            let textOverlay = document.getElementById('live-text-overlay');
+            if (!textOverlay) {
+                textOverlay = document.createElement('div');
+                textOverlay.id = 'live-text-overlay';
+                textOverlay.style.position = 'absolute';
+                textOverlay.style.pointerEvents = 'none';
+                textOverlay.style.fontWeight = 'bold';
+                textOverlay.style.transform = 'translate(-50%, -50%)'; 
+                textOverlay.style.whiteSpace = 'nowrap';
+                textOverlay.style.textShadow = '0px 0px 4px rgba(0,0,0,0.5)';
+                textOverlay.style.zIndex = '9999';
+                viewBox.appendChild(textOverlay);
+            }
+
+            const textContent = document.getElementById('t-text').value;
+            const tColor = document.getElementById('t-color').value;
+            const tSize = parseFloat(document.getElementById('t-size').value) || 40;
+            const tFont = document.getElementById('t-font').value;
+            const tX = parseFloat(document.getElementById('t-x').value);
+            const tY = parseFloat(document.getElementById('t-y').value);
+
+            if (!textContent) {
+                textOverlay.style.display = 'none';
+                return;
+            } else {
+                textOverlay.style.display = 'block';
+            }
+
+            textOverlay.textContent = textContent;
+            textOverlay.style.color = tColor;
+            textOverlay.style.fontFamily = tFont;
+            const cropData = cropper.getData();
+            const viewData = cropper.getCropBoxData();
+            const scale = viewData.width / cropData.width; 
+            
+            textOverlay.style.fontSize = Math.max(10, (tSize * scale)) + 'px';
+            textOverlay.style.left = tX + '%';
+            textOverlay.style.top = tY + '%';
+        }
+
+        async function processAndDownload() {
+            if(!cropper || isProcessing) return;
+            isProcessing = true;
+            statusMsg.textContent = "Processing image...";
+
+            try {
+                const croppedCanvas = cropper.getCroppedCanvas();
+                const cropData = cropper.getData();
+                const unit = unitSelect.value;
+                let targetW = parseFloat(inputWidth.value) || cropData.width;
+                let targetH = parseFloat(inputHeight.value) || cropData.height;
+
+                if (unit === 'percent') {
+                    targetW = Math.round(cropData.width * (targetW / 100));
+                    targetH = Math.round(cropData.height * (targetH / 100));
+                } else if (unit === 'inch') {
+                    targetW = Math.round(targetW * DPI);
+                    targetH = Math.round(targetH * DPI);
+                } else if (unit === 'cm') {
+                    targetW = Math.round((targetW / CM_PER_INCH) * DPI);
+                    targetH = Math.round((targetH / CM_PER_INCH) * DPI);
+                } else if (unit === 'mm') {
+                    targetW = Math.round((targetW / MM_PER_INCH) * DPI);
+                    targetH = Math.round((targetH / MM_PER_INCH) * DPI);
+                }
+
+                targetW = Math.max(1, Math.round(targetW));
+                targetH = Math.max(1, Math.round(targetH));
+
+                const finalCanvas = document.createElement('canvas');
+                finalCanvas.width = targetW;
+                finalCanvas.height = targetH;
+                const ctx = finalCanvas.getContext('2d'); 
+
+                const format = document.getElementById('export-format').value;
+                if(format === 'image/jpeg' || format === 'image/bmp') {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, targetW, targetH);
+                }
+
+                const filterStr = `
+                    grayscale(${document.getElementById('f-gray').checked ? 100 : 0}%)
+                    sepia(${document.getElementById('f-sepia').checked ? 100 : 0}%)
+                    invert(${document.getElementById('f-invert').checked ? 100 : 0}%)
+                    brightness(${document.getElementById('f-bright').value}%)
+                    contrast(${document.getElementById('f-contrast').value}%)
+                    saturate(${document.getElementById('f-saturate').value}%)
+                `;
+                ctx.filter = filterStr;
+                ctx.drawImage(croppedCanvas, 0, 0, targetW, targetH);
+
+                const advEffect = document.getElementById('advanced-effect').value;
+                if (advEffect !== 'none') {
+                    ctx.filter = 'none';
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = targetW; tempCanvas.height = targetH;
+                    const tCtx = tempCanvas.getContext('2d');
+                    tCtx.drawImage(finalCanvas, 0, 0);
+
+                    switch (advEffect) {
+                        case 'sketch':
+                            tCtx.fillStyle = 'white'; tCtx.fillRect(0,0,targetW,targetH);
+                            tCtx.drawImage(finalCanvas, 0, 0);
+                            tCtx.globalCompositeOperation = 'difference';
+                            tCtx.fillStyle = 'white'; tCtx.fillRect(0,0,targetW,targetH);
+                            tCtx.globalCompositeOperation = 'source-over';
+                            tCtx.filter = 'blur(4px) grayscale(100%)';
+                            tCtx.drawImage(tempCanvas, 0, 0);
+                            ctx.globalCompositeOperation = 'color-dodge';
+                            ctx.filter = 'grayscale(100%)';
+                            ctx.drawImage(finalCanvas, 0, 0);
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            ctx.globalCompositeOperation = 'source-over';
+                            break;
+                        case 'glitch':
+                            ctx.clearRect(0,0,targetW,targetH);
+                            ctx.globalCompositeOperation = 'screen';
+                            ctx.fillStyle = 'rgba(255,0,0,1)'; ctx.fillRect(0,0,targetW,targetH);
+                            ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(tempCanvas, 4, 0);
+                            ctx.globalCompositeOperation = 'screen';
+                            ctx.fillStyle = 'rgba(0,255,255,1)'; ctx.fillRect(0,0,targetW,targetH);
+                            ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(tempCanvas, -4, 0);
+                            ctx.globalCompositeOperation = 'source-over';
+                            break;
+                        case 'neon':
+                            ctx.filter = 'saturate(200%) contrast(150%) drop-shadow(0 0 15px #0ff) drop-shadow(0 0 30px #f0f)';
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            break;
+                        case 'motion-blur':
+                            ctx.clearRect(0,0,targetW,targetH);
+                            ctx.globalAlpha = 0.1;
+                            for(let i=0; i<10; i++) ctx.drawImage(tempCanvas, i*3, 0);
+                            ctx.globalAlpha = 1.0;
+                            break;
+                        case 'zoom-blur':
+                            ctx.clearRect(0,0,targetW,targetH);
+                            ctx.globalAlpha = 0.1;
+                            for(let i=0; i<10; i++) {
+                                let scale = 1 + (i*0.02);
+                                ctx.save();
+                                ctx.translate(targetW/2, targetH/2);
+                                ctx.scale(scale, scale);
+                                ctx.translate(-targetW/2, -targetH/2);
+                                ctx.drawImage(tempCanvas, 0, 0);
+                                ctx.restore();
+                            }
+                            ctx.globalAlpha = 1.0;
+                            break;
+                        case 'soft-blur':
+                            ctx.filter = 'blur(6px)';
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            break;
+                        case 'light-leaks':
+                            let grad = ctx.createLinearGradient(0, 0, targetW, targetH);
+                            grad.addColorStop(0, 'rgba(255, 100, 0, 0.4)');
+                            grad.addColorStop(0.5, 'transparent');
+                            grad.addColorStop(1, 'rgba(255, 0, 150, 0.4)');
+                            ctx.globalCompositeOperation = 'screen';
+                            ctx.fillStyle = grad;
+                            ctx.fillRect(0, 0, targetW, targetH);
+                            ctx.globalCompositeOperation = 'source-over';
+                            break;
+                        case 'film-grain':
+                            const imgData = ctx.getImageData(0,0,targetW,targetH);
+                            for(let i=0; i<imgData.data.length; i+=4) {
+                                let noise = (Math.random() - 0.5) * 50;
+                                imgData.data[i] += noise; imgData.data[i+1] += noise; imgData.data[i+2] += noise;
+                            }
+                            ctx.putImageData(imgData, 0, 0);
+                            break;
+                        case 'pop':
+                            ctx.filter = 'saturate(300%) contrast(150%)';
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            break;
+                        case 'cartoon':
+                        case 'watercolor':
+                        case 'oil':
+                        case 'neural':
+                            ctx.filter = advEffect === 'watercolor' ? 'blur(2px) saturate(150%) contrast(120%)' :
+                                         advEffect === 'neural' ? 'saturate(250%) contrast(180%) hue-rotate(15deg)' :
+                                         'blur(1px) contrast(150%) saturate(150%)';
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            const pData = ctx.getImageData(0,0,targetW,targetH);
+                            const levels = advEffect === 'watercolor' ? 32 : 64;
+                            for(let i=0; i<pData.data.length; i+=4) {
+                                pData.data[i] = Math.round(pData.data[i]/levels)*levels;
+                                pData.data[i+1] = Math.round(pData.data[i+1]/levels)*levels;
+                                pData.data[i+2] = Math.round(pData.data[i+2]/levels)*levels;
+                            }
+                            ctx.putImageData(pData, 0, 0);
+                            if (advEffect === 'cartoon' || advEffect === 'neural') {
+                                ctx.globalCompositeOperation = 'multiply';
+                                ctx.globalAlpha = 0.5;
+                                ctx.drawImage(tempCanvas, 1, 1);
+                                ctx.globalAlpha = 1.0;
+                                ctx.globalCompositeOperation = 'source-over';
+                            }
+                            break;
+                        case 'drip':
+                            const dripData = ctx.getImageData(0,0,targetW,targetH);
+                            for(let x=0; x<targetW; x+=Math.floor(Math.random()*20+5)) {
+                                let dropLen = Math.floor(Math.random()*100);
+                                for(let y=0; y<targetH-dropLen; y++) {
+                                    for(let w=0; w<5; w++) {
+                                        if(x+w >= targetW) continue;
+                                        let idx = ((y+dropLen)*targetW + (x+w))*4;
+                                        let sIdx = (y*targetW + (x+w))*4;
+                                        dripData.data[idx] = dripData.data[sIdx];
+                                        dripData.data[idx+1] = dripData.data[sIdx+1];
+                                        dripData.data[idx+2] = dripData.data[sIdx+2];
+                                    }
+                                }
+                            }
+                            ctx.putImageData(dripData, 0, 0);
+                            break;
+                        case 'shatter':
+                            ctx.clearRect(0,0,targetW,targetH);
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            for(let i=0; i<50; i++) {
+                                let sx = Math.random()*targetW, sy = Math.random()*targetH;
+                                let sw = Math.random()*100+20, sh = Math.random()*100+20;
+                                let dx = sx + (Math.random()-0.5)*50, dy = sy + (Math.random()-0.5)*50;
+                                ctx.drawImage(tempCanvas, sx, sy, sw, sh, dx, dy, sw, sh);
+                            }
+                            break;
+                        case 'bokeh':
+                        case 'sparkle':
+                        case 'spirals':
+                            ctx.drawImage(tempCanvas, 0, 0);
+                            ctx.globalCompositeOperation = 'color-dodge';
+                            for(let i=0; i<30; i++) {
+                                ctx.beginPath();
+                                let rx = Math.random()*targetW, ry = Math.random()*targetH;
+                                let rad = advEffect === 'sparkle' ? Math.random()*5+2 : Math.random()*50+10;
+                                ctx.arc(rx, ry, rad, 0, Math.PI*2);
+                                ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.5})`;
+                                ctx.fill();
+                            }
+                            ctx.globalCompositeOperation = 'source-over';
+                            break;
+                    }
+                }
+
+                ctx.filter = 'none';
+                const textContent = document.getElementById('t-text').value;
+                if (textContent) {
+                    const tColor = document.getElementById('t-color').value;
+                    const tSize = parseFloat(document.getElementById('t-size').value) || 40;
+                    const tFont = document.getElementById('t-font').value;
+                    const tX = parseFloat(document.getElementById('t-x').value) / 100;
+                    const tY = parseFloat(document.getElementById('t-y').value) / 100;
+
+                    ctx.fillStyle = tColor;
+                    ctx.font = `bold ${tSize}px ${tFont}`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = "rgba(0,0,0,0.5)";
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText(textContent, targetW * tX, targetH * tY);
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                }
+
+                const targetKB = parseFloat(document.getElementById('export-kb').value);
+                let finalBlob;
+
+                if (targetKB && targetKB > 0 && (format === 'image/jpeg' || format === 'image/webp')) {
+                    finalBlob = await compressToTargetSize(finalCanvas, format, targetKB);
+                } else {
+                    let quality = format === 'image/png' ? undefined : 0.9;
+                    finalBlob = await new Promise(resolve => finalCanvas.toBlob(resolve, format, quality));
+                }
+
+                const url = URL.createObjectURL(finalBlob);
+                const a = document.createElement('a');
+                const ext = format.split('/')[1];
+                a.href = url;
+                a.download = `${originalFileName}-resized.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                statusMsg.textContent = `Success! Saved as ${(finalBlob.size / 1024).toFixed(1)} KB`;
+                setTimeout(() => statusMsg.textContent = "", 4000);
+
+            } catch (err) {
+                console.error(err);
+                statusMsg.textContent = "Error processing image.";
+                statusMsg.classList.replace("text-cyan-300", "text-red-400");
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        async function compressToTargetSize(canvas, mimeType, targetKB) {
+            const targetBytes = targetKB * 1024;
+            let minQ = 0.0;
+            let maxQ = 1.0;
+            let bestBlob = null;
+            let bestDiff = Infinity;
+            
+            for (let i = 0; i < 8; i++) {
+                let currentQ = (minQ + maxQ) / 2;
+                let blob = await new Promise(resolve => canvas.toBlob(resolve, mimeType, currentQ));
+                
+                if (blob.size <= targetBytes) {
+                    let diff = targetBytes - blob.size;
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        bestBlob = blob;
+                    }
+                    minQ = currentQ;
+                } else {
+                    maxQ = currentQ;
+                }
+            }
+
+            if (!bestBlob) {
+                bestBlob = await new Promise(resolve => canvas.toBlob(resolve, mimeType, 0.01));
+                console.warn("Could not reach target size even at minimum quality.");
+            }
+
+            return bestBlob;
+        }
+    </script>
+</body>
+</html>
